@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>萬聖節 AR 抓寶大冒險</title>
+  <!-- 載入 HTML5 QR Code 掃描庫 -->
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <style>
+    :root {
+      --primary-color: #ff7518;
+      --secondary-color: #4b0082;
+      --bg-color: #1a1a2e;
+      --card-bg: #16213e;
+      --text-color: #ffffff;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      user-select: none;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* 主頁集點卡樣式 */
+    .container {
+      width: 100%;
+      max-width: 480px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    header h1 {
+      color: var(--primary-color);
+      font-size: 1.8rem;
+      margin-bottom: 5px;
+      text-shadow: 0 0 10px rgba(255, 117, 24, 0.5);
+    }
+
+    .stamp-card {
+      background: var(--card-bg);
+      border: 3px solid var(--primary-color);
+      border-radius: 15px;
+      padding: 20px;
+      width: 100%;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+      margin-bottom: 25px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-top: 15px;
+    }
+
+    .stamp-slot {
+      aspect-ratio: 1;
+      background: rgba(255,255,255,0.05);
+      border: 2px dashed #555;
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.8rem;
+      position: relative;
+      transition: all 0.3s ease;
+    }
+
+    .stamp-slot.collected {
+      border-style: solid;
+      border-color: var(--primary-color);
+      background: rgba(255, 117, 24, 0.15);
+      animation: pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    .stamp-slot .monster-name {
+      font-size: 0.65rem;
+      color: #aaa;
+      margin-top: 2px;
+    }
+
+    .btn {
+      background: linear-gradient(135deg, #ff7518, #e65c00);
+      color: white;
+      border: none;
+      padding: 14px 28px;
+      font-size: 1.1rem;
+      font-weight: bold;
+      border-radius: 30px;
+      cursor: pointer;
+      box-shadow: 0 4px 15px rgba(255, 117, 24, 0.4);
+      transition: transform 0.2s, background 0.2s;
+      width: 80%;
+      max-width: 300px;
+      margin-bottom: 15px;
+    }
+
+    .btn:active {
+      transform: scale(0.96);
+    }
+
+    .btn-verify {
+      background: linear-gradient(135deg, #8a2be2, var(--secondary-color));
+      box-shadow: 0 4px 15px rgba(138, 43, 226, 0.4);
+      display: none;
+    }
+
+    /* 掃描 & AR 全螢幕容器 */
+    .fullscreen-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: #000;
+      z-index: 100;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    #reader {
+      width: 100%;
+      max-width: 500px;
+      height: 100%;
+    }
+
+    .overlay-header {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      right: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 101;
+    }
+
+    .close-btn {
+      background: rgba(0,0,0,0.6);
+      color: white;
+      border: 1px solid #fff;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      font-size: 1.2rem;
+      cursor: pointer;
+    }
+
+    /* 抓寶 AR 模擬畫面 */
+    #catch-stage {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      background: radial-gradient(circle, #2c1654 0%, #000000 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-around;
+      overflow: hidden;
+    }
+
+    .monster-display {
+      font-size: 7rem;
+      margin-top: 80px;
+      animation: float 2s infinite ease-in-out;
+      transition: all 0.5s ease;
+    }
+
+    .ball-container {
+      margin-bottom: 50px;
+      cursor: pointer;
+    }
+
+    .pumpkin-ball {
+      font-size: 4.5rem;
+      transition: transform 0.3s ease;
+      filter: drop-shadow(0 0 10px rgba(255,117,24,0.8));
+    }
+
+    .pumpkin-ball.throw {
+      animation: throwBall 0.8s forwards ease-out;
+    }
+
+    /* 核銷 Modal */
+    .modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0,0,0,0.8);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+    }
+
+    .modal-content {
+      background: var(--card-bg);
+      border: 2px solid var(--primary-color);
+      border-radius: 15px;
+      padding: 25px;
+      width: 85%;
+      max-width: 360px;
+      text-align: center;
+    }
+
+    .modal-content input {
+      width: 100%;
+      padding: 12px;
+      margin: 15px 0;
+      border-radius: 8px;
+      border: 1px solid #444;
+      background: #0f172a;
+      color: #fff;
+      font-size: 1.2rem;
+      text-align: center;
+      letter-spacing: 5px;
+    }
+
+    /* 動畫 Keyframes */
+    @keyframes float {
+      0%, 100% { transform: translateY(0) scale(1); }
+      50% { transform: translateY(-20px) scale(1.05); }
+    }
+
+    @keyframes throwBall {
+      0% { transform: translateY(0) scale(1) rotate(0deg); }
+      50% { transform: translateY(-300px) scale(0.6) rotate(360deg); }
+      100% { transform: translateY(-400px) scale(0) rotate(720deg); }
+    }
+
+    @keyframes pop {
+      0% { transform: scale(0.8); }
+      50% { transform: scale(1.2); }
+      100% { transform: scale(1); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 主頁面：集點卡 -->
+  <div class="container">
+    <header>
+      <h1>🎃 萬聖抓寶闖關 👻</h1>
+      <p>尋找 8 個站點，收服萬聖小怪物！</p>
+    </header>
+
+    <div class="stamp-card">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h3>我的集點卡</h3>
+        <span id="progress-text" style="color: var(--primary-color); font-weight: bold;">0 / 8</span>
+      </div>
+      <div class="grid" id="stamp-grid">
+        <!-- 由 JS 動態生成 8 個卡位 -->
+      </div>
+    </div>
+
+    <button class="btn" id="start-btn" onclick="openScanner()">開啟雷達掃瞄器 🔍</button>
+    <button class="btn btn-verify" id="verify-btn" onclick="openVerifyModal()">出示換領小禮物 🎁</button>
+  </div>
+
+  <!-- 掃描 & 抓寶全螢幕畫布 -->
+  <div class="fullscreen-overlay" id="game-overlay">
+    <div class="overlay-header">
+      <span style="font-weight: bold; background: rgba(0,0,0,0.5); padding: 5px 12px; border-radius: 15px;">
+        <span id="overlay-title">掃描地點 QR Code</span>
+      </span>
+      <button class="close-btn" onclick="closeOverlay()">✕</button>
+    </div>
+
+    <!-- 階段 1：QR Code 掃描器 -->
+    <div id="reader"></div>
+
+    <!-- 階段 2：AR 抓寶模擬畫面 -->
+    <div id="catch-stage" style="display: none;">
+      <div class="monster-display" id="active-monster">👻</div>
+      <div style="text-align: center;">
+        <p style="font-size: 1.2rem; font-weight: bold; margin-bottom: 5px;" id="monster-name-tag">野生小幽靈出現了！</p>
+        <p style="font-size: 0.9rem; color: #ccc;">點擊南瓜球進行收服！</p>
+      </div>
+      <div class="ball-container" onclick="throwPumpkinBall()">
+        <div class="pumpkin-ball" id="pumpkin-ball">🎃</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 工作人員核銷 Modal -->
+  <div class="modal" id="verify-modal">
+    <div class="modal-content">
+      <h3>🎁 兌換萬聖小禮物</h3>
+      <p style="font-size: 0.85rem; color: #aaa; margin-top: 5px;">請交由服務台工作人員操作</p>
+      <input type="password" id="passcode" maxlength="4" placeholder="輸入核銷碼">
+      <div style="display: flex; gap: 10px;">
+        <button class="btn" style="width: 50%; background: #555;" onclick="closeVerifyModal()">取消</button>
+        <button class="btn" style="width: 50%;" onclick="confirmRedeem()">確認核銷</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 8 個關卡對應的怪物與資料
+    const MONSTERS = [
+      { id: 'spot_1', name: '南瓜怪', icon: '🎃' },
+      { id: 'spot_2', name: '淘氣幽靈', icon: '👻' },
+      { id: 'spot_3', name: '小吸血鬼', icon: '🦇' },
+      { id: 'spot_4', name: '骷髏人', icon: '💀' },
+      { id: 'spot_5', name: '萬聖蜘蛛', icon: '🕷️' },
+      { id: 'spot_6', name: '黑貓精靈', icon: '🐈‍⬛' },
+      { id: 'spot_7', name: '魔法飛掃', icon: '🧹' },
+      { id: 'spot_8', name: '糖果怪人', icon: '🍬' }
+    ];
+
+    // 工作人員預設核銷密碼
+    const STAFF_PASSCODE = "1031";
+
+    let collectedSet = new Set(JSON.parse(localStorage.getItem('halloween_stamps') || '[]'));
+    let isRedeemed = localStorage.getItem('halloween_redeemed') === 'true';
+    let html5QrcodeScanner = null;
+    let currentTargetMonster = null;
+    let isBallThrowing = false;
+
+    // 初始化頁面
+    function init() {
+      renderStamps();
+      updateProgress();
+    }
+
+    // 繪製集點卡
+    function renderStamps() {
+      const grid = document.getElementById('stamp-grid');
+      grid.innerHTML = '';
+
+      MONSTERS.forEach((m, index) => {
+        const isCollected = collectedSet.has(m.id);
+        const slot = document.createElement('div');
+        slot.className = `stamp-slot ${isCollected ? 'collected' : ''}`;
+        slot.innerHTML = `
+          <span>${isCollected ? m.icon : '❓'}</span>
+          <span class="monster-name">${isCollected ? m.name : `關卡 ${index + 1}`}</span>
+        `;
+        grid.appendChild(slot);
+      });
+    }
+
+    // 更新進度與按鈕狀態
+    function updateProgress() {
+      const count = collectedSet.size;
+      document.getElementById('progress-text').innerText = `${count} / ${MONSTERS.length}`;
+
+      if (isRedeemed) {
+        document.getElementById('start-btn').style.display = 'none';
+        const vBtn = document.getElementById('verify-btn');
+        vBtn.style.display = 'block';
+        vBtn.innerText = '已完成兌換 🎉';
+        vBtn.style.background = '#444';
+        vBtn.disabled = true;
+      } else if (count >= MONSTERS.length) {
+        document.getElementById('start-btn').style.display = 'none';
+        document.getElementById('verify-btn').style.display = 'block';
+      }
+    }
+
+    // 開啟 QR Code 掃描器
+    function openScanner() {
+      document.getElementById('game-overlay').style.display = 'flex';
+      document.getElementById('reader').style.display = 'block';
+      document.getElementById('catch-stage').style.display = 'none';
+      document.getElementById('overlay-title').innerText = '掃描地點 QR Code';
+
+      html5QrcodeScanner = new Html5Qrcode("reader");
+      html5QrcodeScanner.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        onScanSuccess,
+        onScanFailure
+      ).catch(err => {
+        alert("無法存取相機，請確認權限設定。");
+        closeOverlay();
+      });
+    }
+
+    // 掃描成功處理
+    function onScanSuccess(decodedText) {
+      // 假設 QR Code 內容為站點 ID（如 spot_1 ~ spot_8）
+      const foundMonster = MONSTERS.find(m => m.id === decodedText || decodedText.includes(m.id));
+
+      if (!foundMonster) {
+        alert("這不是萬聖抓寶活動的 QR Code 哦！");
+        return;
+      }
+
+      if (collectedSet.has(foundMonster.id)) {
+        alert(`你已經收服過 ${foundMonster.name} 了，去尋找其他站點吧！`);
+        return;
+      }
+
+      // 停止掃描並切換至抓寶 Stage
+      html5QrcodeScanner.stop().then(() => {
+        currentTargetMonster = foundMonster;
+        enterCatchStage();
+      });
+    }
+
+    function onScanFailure(error) {
+      // 掃描過程中持續尋找 QR Code，無視一般失敗
+    }
+
+    // 進入抓寶介面
+    function enterCatchStage() {
+      document.getElementById('reader').style.display = 'none';
+      document.getElementById('catch-stage').style.display = 'flex';
+      document.getElementById('overlay-title').innerText = '發現萬聖小怪物！';
+      
+      document.getElementById('active-monster').innerText = currentTargetMonster.icon;
+      document.getElementById('monster-name-tag').innerText = `野生【${currentTargetMonster.name}】出現了！`;
+      
+      // 重置球狀態
+      const ball = document.getElementById('pumpkin-ball');
+      ball.classList.remove('throw');
+      isBallThrowing = false;
+    }
+
+    // 投擲南瓜球收服
+    function throwPumpkinBall() {
+      if (isBallThrowing) return;
+      isBallThrowing = true;
+
+      const ball = document.getElementById('pumpkin-ball');
+      const monster = document.getElementById('active-monster');
+      
+      ball.classList.add('throw');
+
+      setTimeout(() => {
+        monster.style.transform = 'scale(0)';
+        monster.style.opacity = '0';
+      }, 400);
+
+      setTimeout(() => {
+        alert(`太棒了！成功收服【${currentTargetMonster.name}】！🎉`);
+        
+        // 儲存進度
+        collectedSet.add(currentTargetMonster.id);
+        localStorage.setItem('halloween_stamps', JSON.stringify([...collectedSet]));
+        
+        // 恢復怪物樣式並關閉
+        monster.style.transform = 'scale(1)';
+        monster.style.opacity = '1';
+        
+        closeOverlay();
+        renderStamps();
+        updateProgress();
+      }, 1000);
+    }
+
+    // 關閉全螢幕 Overlay
+    function closeOverlay() {
+      if (html5QrcodeScanner && html5QrcodeScanner.isScanning) {
+        html5QrcodeScanner.stop().catch(() => {});
+      }
+      document.getElementById('game-overlay').style.display = 'none';
+    }
+
+    // 開啟核銷 Modal
+    function openVerifyModal() {
+      document.getElementById('verify-modal').style.display = 'flex';
+    }
+
+    function closeVerifyModal() {
+      document.getElementById('verify-modal').style.display = 'none';
+      document.getElementById('passcode').value = '';
+    }
+
+    // 確認核銷
+    function confirmRedeem() {
+      const code = document.getElementById('passcode').value;
+      if (code === STAFF_PASSCODE) {
+        alert("核銷成功！請領取您的萬聖節小禮物 🎁");
+        isRedeemed = true;
+        localStorage.setItem('halloween_redeemed', 'true');
+        closeVerifyModal();
+        updateProgress();
+      } else {
+        alert("核銷密碼錯誤，請洽現場工作人員！");
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>
